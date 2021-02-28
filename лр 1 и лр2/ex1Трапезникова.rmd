@@ -1,0 +1,867 @@
+---
+title: "Вариант 27"
+subtitle: "Упражнение 1"
+author: "Трапезникова Анастасия"
+date: "`r format(Sys.Date(), '%d  %B  %Y')`"
+output: word_document
+
+---
+
+```{r setup, include = FALSE}
+library('knitr')
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+
+# Данные варианта.
+
+Функция для задачи 1:
+
+$$f(X) = 5+3.5\cdot cos(\frac{x-30}{9})$$
+
+Характеристики для задачи 2:
+
+$$res.sd = 5.5; res.sd = 6; res.sd = 6.5$$
+
+
+# Задача 1.
+
+На данных своего варианта повторить три графика из первой практики, выбрав число степеней свободы как компромисс между точностью (оценкой ошибки на тестовой выборке) и простотой модели (числом степеней свободы). Все рисунки сохранить в графические файлы в формате png.
+
+Сгенерируем X и Y линейной модели и изобразим исходные данные на графике.
+
+$$X \sim U(5, 105)$$
+$$Y = f(X) + \epsilon, где f(X) = 5+3.5\cdot cos(\frac{x-30}{9}); \epsilon \sim N(0,1).$$
+
+```{r}
+
+#  Генерируем данные ###########################################################
+
+my.seed <- 27    # ядро
+n.all <- 60              # наблюдений всего
+train.percent <- 0.85    # доля обучающей выборки
+res.sd <- 1              # стандартное отклонение случайного шума
+x.min <- 5               # границы изменения X: нижняя
+x.max <- 105             #  и верхняя
+
+# фактические значения x
+set.seed(my.seed)
+x <- runif(x.min, x.max, n = n.all)
+
+# случайный шум
+set.seed(my.seed)
+res <- rnorm(mean = 0, sd = res.sd, n = n.all)
+
+# отбираем наблюдения в обучающую выборку
+set.seed(my.seed)
+inTrain <- sample(seq_along(x), size = train.percent*n.all)
+
+# истинная функция взаимосвязи
+y.func <- function(x) {5 + 3.5*sin((x - 30)/9)}
+
+# для графика истинной взаимосвязи
+x.line <- seq(x.min, x.max, length = n.all)
+y.line <- y.func(x.line)
+
+# фактические значения y (с шумом)
+y <- y.func(x) + res
+
+# Создаём векторы с данными для построения графиков ############################
+
+# наблюдения на обучающей выборке
+x.train <- x[inTrain]
+y.train <- y[inTrain]
+
+# наблюдения на тестовой выборке
+x.test <- x[-inTrain]
+y.test <- y[-inTrain]
+
+#  График 1: Исходные данные на график #########################################
+
+#png("plot1_1.png", width = 600, height = 250)
+
+# убираем широкие поля рисунка
+par(mar = c(4, 4, 1, 1))
+
+# наименьшие/наибольшие значения по осям
+x.lim <- c(x.min, x.max)
+y.lim <- c(min(y), max(y))
+
+# наблюдения с шумом (обучающая выборка)
+plot(x.train, y.train, 
+     col = grey(0.2), bg = grey(0.2), pch = 21,
+     xlab = 'X', ylab = 'Y', 
+     xlim = x.lim, ylim = y.lim, 
+     cex = 1.2, cex.lab = 1.2, cex.axis = 1.2)
+
+# заголовок
+mtext('Исходные данные и истинная функция связи', side = 3)
+
+# наблюдения тестовой выборки
+points(x.test, y.test, col = 'red', bg = 'red', pch = 21)
+
+# истинная функция
+lines(x.line, y.line, lwd = 2, lty = 2)
+
+# легенда
+legend('topleft', legend = c('обучение', 'тест', 'f(X)'),
+       pch = c(16, 16, NA), 
+       col = c(grey(0.2), 'red', 'black'),  
+       lty = c(0, 0, 2), lwd = c(1, 1, 2), cex = 1.2)
+
+#dev.off()
+```
+<!--![](plot1_1.png)-->
+
+В качестве модели используем сплайны со степенями свободы от 2 (прямая) до 40 (количество узлов равно 2/3 наблюдений). Строим модели с различным количеством степеней свободы и в каждом случае считаем среднеквадратическую ошибку модели на обучающей и тестовой выборках.
+
+Получаем таблицу вида:
+
+```{r}
+#  Теперь строим модели с df от 2 до 40 ########################################
+
+# максимальное число степеней свободы для модели сплайна
+max.df <- 40
+
+tbl <- data.frame(df = 2:max.df)   # таблица для записи ошибок
+tbl$MSE.train <- 0                 # столбец: ошибки на обучающей выборке
+tbl$MSE.test <- 0                  # столбец: ошибки на тестовой выборке
+
+# цикл по степеням свободы
+for (i in 2:max.df) {
+  # строим модель
+  mod <- smooth.spline(x = x.train, y = y.train, df = i)
+  
+  # модельные значения для расчёта ошибок
+  y.model.train <- predict(mod, data.frame(x = x.train))$y[, 1]
+  y.model.test <- predict(mod, data.frame(x = x.test))$y[, 1]
+  
+  # считаем средний квадрат ошибки на обучающей и тестовой выборке
+  MSE <- c(sum((y.train - y.model.train)^2) / length(x.train),
+           sum((y.test - y.model.test)^2) / length(x.test))
+  
+  # записываем ошибки в таблицу
+  tbl[tbl$df == i, c('MSE.train', 'MSE.test')] <- MSE
+}
+
+# первые строки таблицы
+kable(head(tbl, n = 10))
+```
+
+Расчёт ошибки на обучающей выборке:
+
+$$MSE=\frac{1}{n_{TRAIN}} \displaystyle\sum_{i\in TRAIN}(y_i-\hat{f}(x_i))^2$$
+Расчёт ошибки на тестовой выборке:
+
+$$MSE_{test}=\frac{1}{n_{TEST}} \displaystyle\sum_{i\in TEST}(y_i-\hat{f}(x_i))^2$$
+
+Изобразим на графике поведение ошибок при различном количестве степеней свободы.
+
+```{r}
+# График 2: Зависимость MSE от гибкости модели ################################
+#png("plot1_2.png", width = 600, height = 400)
+
+plot(x = tbl$df, y = tbl$MSE.test, 
+     type = 'l', col = 'red', lwd = 2,
+     xlab = 'Степени свободы сплайна', ylab = 'MSE',
+     ylim = c(min(tbl$MSE.train, tbl$MSE.test), 
+              max(tbl$MSE.train, tbl$MSE.test)),
+     cex = 1.2, cex.lab = 1.2, cex.axis = 1.2)
+
+# заголовок
+mtext('Изменение MSE с ростом числа степеней свободы', side = 3)
+
+points(x = tbl$df, y = tbl$MSE.test,
+       pch = 21, col = 'red', bg = 'red')
+lines(x = tbl$df, y = tbl$MSE.train, col = grey(0.3), lwd = 2)
+# неустранимая ошибка
+abline(h = res.sd, lty = 2, col = grey(0.4), lwd = 2)
+
+# легенда
+legend('topleft', legend = c('обучающая', 'тестовая'),
+       pch = c(NA, 16), 
+       col = c(grey(0.2), 'red'),  
+       lty = c(1, 1), lwd = c(2, 2), cex = 1.2)
+
+# степени свободы у наименьшей ошибки на тестовой выборке
+min.MSE.test <- min(tbl$MSE.test)
+df.min.MSE.test <- tbl[tbl$MSE.test == min.MSE.test, 'df']
+
+# компромисс между точностью и простотой модели по графику
+df.my.MSE.test <- 10
+my.MSE.test <- tbl[tbl$df == df.my.MSE.test, 'MSE.test']
+
+# ставим точку на графике
+abline(v = df.my.MSE.test, 
+       lty = 2, lwd = 2)
+points(x = df.my.MSE.test, y = my.MSE.test, 
+       pch = 15, col = 'blue')
+mtext(df.my.MSE.test, 
+      side = 1, line = -1, at = df.my.MSE.test, col = 'blue', cex = 1.2)
+
+#dev.off()
+```
+
+<!--![](plot1_2.png)-->
+
+На этом графике:
+
+- При движении слева направо MSE на обучающей выборке (серая кривая) сокращается, потому что с ростом числа степеней свободы растёт число узлов, по которым строится сплайн. При этом модельная кривая подгоняется по всё возрастающему количеству точек и становится всё более гибкой. В результате индивидуальные расстояния от фактических наблюдений за Y до их модельных оценок сокращаются, что приводит к сокращению MSE.
+
+- При движении слева направо MSE на тестовой выборке (красная кривая) сначала медленно сокращается, затем растёт. Нам известна истинная форма связи Y с X, она описывается тригонометрической функцией. Число степеней свободы такой модели равно числу оцениваемых параметров, т.е. 2 (коэффициент перед cos и константа). 
+
+Наименьшее значение MSE на тестовой выборке соответствует числу степеней свободы 11 и равно 1,051278. Визуально по графику мы можем установить, что первое значение MSEТЕСТ, близкое к стабильно низким, соответствует df = 10. Ошибка здесь меньше 1, что ненамного отличается от минимума. Именно df = 10 было выбрано в качестве компромисса между точностью (минимальной MSE на тестовой выборке) и простотой модели (чем меньше степеней свободы, тем модель проще).
+
+График с моделью, выбранной в качестве лучшей, показан на рисунке ниже.
+
+```{r}
+#  График 3: Лучшая модель (компромисс между гибкостью и точностью) ############
+#png("plot1_3.png", width = 600)
+
+mod.MSE.test <- smooth.spline(x = x.train, y = y.train, df = df.my.MSE.test)
+
+# для гладких графиков модели
+x.model.plot <- seq(x.min, x.max, length = 250)
+y.model.plot <- predict(mod.MSE.test, data.frame(x = x.model.plot))$y[, 1]
+
+# убираем широкие поля рисунка
+par(mar = c(4, 4, 1, 1))
+
+# наименьшие/наибольшие значения по осям
+x.lim <- c(x.min, x.max)
+y.lim <- c(min(y), max(y))
+
+# наблюдения с шумом (обучающая выборка)
+plot(x.train, y.train, 
+     col = grey(0.2), bg = grey(0.2), pch = 21,
+     xlab = 'X', ylab = 'Y', 
+     xlim = x.lim, ylim = y.lim, 
+     cex = 1.2, cex.lab = 1.2, cex.axis = 1.2)
+
+# заголовок
+mtext('Исходные данные и лучшая модель', side = 3)
+
+# наблюдения тестовой выборки
+points(x.test, y.test, 
+       col = 'red', bg = 'red', pch = 21)
+
+# истинная функция
+lines(x.line, y.line, 
+      lwd = 2, lty = 2)
+
+# модель
+lines(x.model.plot, y.model.plot, 
+      lwd = 2, col = 'blue')
+
+# легенда
+legend('topleft', legend = c('обучение', 'тест', 'f(X)', 'модель'),
+       pch = c(16, 16, NA, NA), 
+       col = c(grey(0.2), 'red', 'black', 'blue'),  
+       lty = c(0, 0, 2, 1), lwd = c(1, 1, 2, 2), cex = 1.2)
+#dev.off()
+```
+
+<!--![](plot1_3.png)-->
+
+# Задача 2.
+
+*Задание: Решить задачу 1, изменив характеристики данных (стандартное отклонение случайного шума от 2 до 4). Почему при таком изменении данных MSE меняется именно так? Все рисунки сохранить в графические файлы в формате png.*
+
+
+```{r}
+res.sd <- 5.5              # стандартное отклонение случайного шума
+df.choose <- 7           # выбрать для графика 2 оптимальную степень свободы
+
+# фактические значения x
+set.seed(my.seed)
+x <- runif(x.min, x.max, n = n.all)
+
+# случайный шум
+set.seed(my.seed)
+res <- rnorm(mean = 0, sd = res.sd, n = n.all)
+
+# отбираем наблюдения в обучающую выборку
+set.seed(my.seed)
+inTrain <- sample(seq_along(x), size = train.percent*n.all)
+
+# истинная функция взаимосвязи
+y.func <- function(x) {5 + 3.5*sin((x - 30)/9)}
+
+# для графика истинной взаимосвязи
+x.line <- seq(x.min, x.max, length = n.all)
+y.line <- y.func(x.line)
+
+# фактические значения y (с шумом)
+y <- y.func(x) + res
+
+# Создаём векторы с данными для построения графиков ############################
+
+# наблюдения на обучающей выборке
+x.train <- x[inTrain]
+y.train <- y[inTrain]
+
+# наблюдения на тестовой выборке
+x.test <- x[-inTrain]
+y.test <- y[-inTrain]
+
+png("plot1(2).png", width = 600)
+
+#  График 1: Исходные данные на график #########################################
+
+par(mfrow = c(1, 3))
+
+# убираем широкие поля рисунка
+par(mar = c(4, 4, 1, 1))
+
+# наименьшие/наибольшие значения по осям
+x.lim <- c(x.min, x.max)
+y.lim <- c(min(y), max(y))
+
+# наблюдения с шумом (обучающая выборка)
+plot(x.train, y.train, 
+     col = grey(0.2), bg = grey(0.2), pch = 21,
+     xlab = 'X', ylab = 'Y', 
+     xlim = x.lim, ylim = y.lim, 
+     cex = 1.2, cex.lab = 1.2, cex.axis = 1.2)
+
+# заголовок
+mtext('Исходные данные и истинная функция связи', side = 4)
+
+# наблюдения тестовой выборки
+points(x.test, y.test, col = 'red', bg = 'red', pch = 21)
+
+# истинная функция
+lines(x.line, y.line, lwd = 2, lty = 2)
+
+# легенда
+legend('top', legend = c('обучение', 'тест', 'f(X)'),
+       pch = c(16, 16, NA), 
+       col = c(grey(0.2), 'red', 'black'),  
+       lty = c(0, 0, 2), lwd = c(1, 1, 2), cex = 1.2)
+
+#  Строим модель №2 #########################################
+
+#  Теперь строим модели с df от 2 до 40 ########################################
+
+# максимальное число степеней свободы для модели сплайна
+max.df <- 40
+
+tbl <- data.frame(df = 2:max.df)   # таблица для записи ошибок
+tbl$MSE.train <- 0                 # столбец: ошибки на обучающей выборке
+tbl$MSE.test <- 0                  # столбец: ошибки на тестовой выборке
+
+# цикл по степеням свободы
+for (i in 2:max.df) {
+  # строим модель
+  mod <- smooth.spline(x = x.train, y = y.train, df = i)
+  
+  # модельные значения для расчёта ошибок
+  y.model.train <- predict(mod, data.frame(x = x.train))$y[, 1]
+  y.model.test <- predict(mod, data.frame(x = x.test))$y[, 1]
+  
+  # считаем средний квадрат ошибки на обучающей и тестовой выборке
+  MSE <- c(sum((y.train - y.model.train)^2) / length(x.train),
+           sum((y.test - y.model.test)^2) / length(x.test))
+  
+  # записываем ошибки в таблицу
+  tbl[tbl$df == i, c('MSE.train', 'MSE.test')] <- MSE
+}
+
+# первые строки таблицы
+kable(head(tbl, n = 10))
+
+# График 2: Зависимость MSE от гибкости модели ################################
+
+
+plot(x = tbl$df, y = tbl$MSE.test, 
+     type = 'l', col = 'red', lwd = 2,
+     xlab = 'Степени свободы сплайна', ylab = 'MSE',
+     ylim = c(min(tbl$MSE.train, tbl$MSE.test), 
+              max(tbl$MSE.train, tbl$MSE.test)),
+     cex = 1.2, cex.lab = 1.2, cex.axis = 1.2)
+
+# заголовок
+mtext('Изменение MSE с ростом числа степеней свободы', side = 4)
+
+points(x = tbl$df, y = tbl$MSE.test,
+       pch = 21, col = 'red', bg = 'red')
+lines(x = tbl$df, y = tbl$MSE.train, col = grey(0.3), lwd = 2)
+# неустранимая ошибка
+abline(h = res.sd, lty = 2, col = grey(0.4), lwd = 2)
+
+# легенда
+legend('top', legend = c('обучающая', 'тестовая'),
+       pch = c(NA, 16), 
+       col = c(grey(0.2), 'red'),  
+       lty = c(1, 1), lwd = c(2, 2), cex = 1.2)
+
+# степени свободы у наименьшей ошибки на тестовой выборке
+min.MSE.test <- min(tbl$MSE.test)
+df.min.MSE.test <- tbl[tbl$MSE.test == min.MSE.test, 'df']
+
+# компромисс между точностью и простотой модели по графику
+df.my.MSE.test <- df.choose
+my.MSE.test <- tbl[tbl$df == df.my.MSE.test, 'MSE.test']
+
+# ставим точку на графике
+abline(v = df.my.MSE.test, 
+       lty = 2, lwd = 2)
+points(x = df.my.MSE.test, y = my.MSE.test, 
+       pch = 15, col = 'blue')
+
+mtext(df.my.MSE.test, 
+      side = 1, line = -1, at = df.my.MSE.test, col = 'blue', cex = 1.2)
+
+
+
+#  График 3: Лучшая модель (компромисс между гибкостью и точностью) ############
+
+
+mod.MSE.test <- smooth.spline(x = x.train, y = y.train, df = df.my.MSE.test)
+
+# для гладких графиков модели
+x.model.plot <- seq(x.min, x.max, length = 250)
+y.model.plot <- predict(mod.MSE.test, data.frame(x = x.model.plot))$y[, 1]
+
+# убираем широкие поля рисунка
+par(mar = c(4, 4, 1, 1))
+
+# наименьшие/наибольшие значения по осям
+x.lim <- c(x.min, x.max)
+y.lim <- c(min(y), max(y))
+
+# наблюдения с шумом (обучающая выборка)
+plot(x.train, y.train, 
+     col = grey(0.2), bg = grey(0.2), pch = 21,
+     xlab = 'X', ylab = 'Y', 
+     xlim = x.lim, ylim = y.lim, 
+     cex = 1.2, cex.lab = 1.2, cex.axis = 1.2)
+
+# заголовок
+mtext('Исходные данные и лучшая модель', side = 4)
+
+# наблюдения тестовой выборки
+points(x.test, y.test, 
+       col = 'red', bg = 'red', pch = 21)
+
+# истинная функция
+lines(x.line, y.line, 
+      lwd = 2, lty = 2)
+
+# модель
+lines(x.model.plot, y.model.plot, 
+      lwd = 2, col = 'blue')
+
+# легенда
+legend('top', legend = c('обучение', 'тест', 'f(X)', 'модель'),
+       pch = c(16, 16, NA, NA), 
+       col = c(grey(0.2), 'red', 'black', 'blue'),  
+       lty = c(0, 0, 2, 1), lwd = c(1, 1, 2, 2), cex = 1.2)
+
+par(mfrow = c(1, 1))
+dev.off()
+
+```
+![](plot1(2).png)
+
+
+
+
+
+```{r}
+res.sd <- 6              # стандартное отклонение случайного шума
+df.choose <- 7           # выбрать для графика 2 оптимальную степень свободы
+
+# фактические значения x
+set.seed(my.seed)
+x <- runif(x.min, x.max, n = n.all)
+
+# случайный шум
+set.seed(my.seed)
+res <- rnorm(mean = 0, sd = res.sd, n = n.all)
+
+# отбираем наблюдения в обучающую выборку
+set.seed(my.seed)
+inTrain <- sample(seq_along(x), size = train.percent*n.all)
+
+# истинная функция взаимосвязи
+y.func <- function(x) {5 + 3.5*sin((x - 30)/9)}
+
+# для графика истинной взаимосвязи
+x.line <- seq(x.min, x.max, length = n.all)
+y.line <- y.func(x.line)
+
+# фактические значения y (с шумом)
+y <- y.func(x) + res
+
+# Создаём векторы с данными для построения графиков ############################
+
+# наблюдения на обучающей выборке
+x.train <- x[inTrain]
+y.train <- y[inTrain]
+
+# наблюдения на тестовой выборке
+x.test <- x[-inTrain]
+y.test <- y[-inTrain]
+
+png("plot1(3).png", width = 600)
+
+#  График 1: Исходные данные на график #########################################
+
+par(mfrow = c(1, 3))
+
+# убираем широкие поля рисунка
+par(mar = c(4, 4, 1, 1))
+
+# наименьшие/наибольшие значения по осям
+x.lim <- c(x.min, x.max)
+y.lim <- c(min(y), max(y))
+
+# наблюдения с шумом (обучающая выборка)
+plot(x.train, y.train, 
+     col = grey(0.2), bg = grey(0.2), pch = 21,
+     xlab = 'X', ylab = 'Y', 
+     xlim = x.lim, ylim = y.lim, 
+     cex = 1.2, cex.lab = 1.2, cex.axis = 1.2)
+
+# заголовок
+mtext('Исходные данные и истинная функция связи', side = 4)
+
+# наблюдения тестовой выборки
+points(x.test, y.test, col = 'red', bg = 'red', pch = 21)
+
+# истинная функция
+lines(x.line, y.line, lwd = 2, lty = 2)
+
+# легенда
+legend('top', legend = c('обучение', 'тест', 'f(X)'),
+       pch = c(16, 16, NA), 
+       col = c(grey(0.2), 'red', 'black'),  
+       lty = c(0, 0, 2), lwd = c(1, 1, 2), cex = 1.2)
+
+#  Строим модель №2 #########################################
+
+#  Теперь строим модели с df от 2 до 40 ########################################
+
+# максимальное число степеней свободы для модели сплайна
+max.df <- 40
+
+tbl <- data.frame(df = 2:max.df)   # таблица для записи ошибок
+tbl$MSE.train <- 0                 # столбец: ошибки на обучающей выборке
+tbl$MSE.test <- 0                  # столбец: ошибки на тестовой выборке
+
+# цикл по степеням свободы
+for (i in 2:max.df) {
+  # строим модель
+  mod <- smooth.spline(x = x.train, y = y.train, df = i)
+  
+  # модельные значения для расчёта ошибок
+  y.model.train <- predict(mod, data.frame(x = x.train))$y[, 1]
+  y.model.test <- predict(mod, data.frame(x = x.test))$y[, 1]
+  
+  # считаем средний квадрат ошибки на обучающей и тестовой выборке
+  MSE <- c(sum((y.train - y.model.train)^2) / length(x.train),
+           sum((y.test - y.model.test)^2) / length(x.test))
+  
+  # записываем ошибки в таблицу
+  tbl[tbl$df == i, c('MSE.train', 'MSE.test')] <- MSE
+}
+
+# первые строки таблицы
+kable(head(tbl, n = 10))
+
+# График 2: Зависимость MSE от гибкости модели ################################
+
+
+plot(x = tbl$df, y = tbl$MSE.test, 
+     type = 'l', col = 'red', lwd = 2,
+     xlab = 'Степени свободы сплайна', ylab = 'MSE',
+     ylim = c(min(tbl$MSE.train, tbl$MSE.test), 
+              max(tbl$MSE.train, tbl$MSE.test)),
+     cex = 1.2, cex.lab = 1.2, cex.axis = 1.2)
+
+# заголовок
+mtext('Изменение MSE с ростом числа степеней свободы', side = 4)
+
+points(x = tbl$df, y = tbl$MSE.test,
+       pch = 21, col = 'red', bg = 'red')
+lines(x = tbl$df, y = tbl$MSE.train, col = grey(0.3), lwd = 2)
+# неустранимая ошибка
+abline(h = res.sd, lty = 2, col = grey(0.4), lwd = 2)
+
+# легенда
+legend('top', legend = c('обучающая', 'тестовая'),
+       pch = c(NA, 16), 
+       col = c(grey(0.2), 'red'),  
+       lty = c(1, 1), lwd = c(2, 2), cex = 1.2)
+
+# степени свободы у наименьшей ошибки на тестовой выборке
+min.MSE.test <- min(tbl$MSE.test)
+df.min.MSE.test <- tbl[tbl$MSE.test == min.MSE.test, 'df']
+
+# компромисс между точностью и простотой модели по графику
+df.my.MSE.test <- df.choose
+my.MSE.test <- tbl[tbl$df == df.my.MSE.test, 'MSE.test']
+
+# ставим точку на графике
+abline(v = df.my.MSE.test, 
+       lty = 2, lwd = 2)
+points(x = df.my.MSE.test, y = my.MSE.test, 
+       pch = 15, col = 'blue')
+
+mtext(df.my.MSE.test, 
+      side = 1, line = -1, at = df.my.MSE.test, col = 'blue', cex = 1.2)
+
+
+
+#  График 3: Лучшая модель (компромисс между гибкостью и точностью) ############
+
+
+mod.MSE.test <- smooth.spline(x = x.train, y = y.train, df = df.my.MSE.test)
+
+# для гладких графиков модели
+x.model.plot <- seq(x.min, x.max, length = 250)
+y.model.plot <- predict(mod.MSE.test, data.frame(x = x.model.plot))$y[, 1]
+
+# убираем широкие поля рисунка
+par(mar = c(4, 4, 1, 1))
+
+# наименьшие/наибольшие значения по осям
+x.lim <- c(x.min, x.max)
+y.lim <- c(min(y), max(y))
+
+# наблюдения с шумом (обучающая выборка)
+plot(x.train, y.train, 
+     col = grey(0.2), bg = grey(0.2), pch = 21,
+     xlab = 'X', ylab = 'Y', 
+     xlim = x.lim, ylim = y.lim, 
+     cex = 1.2, cex.lab = 1.2, cex.axis = 1.2)
+
+# заголовок
+mtext('Исходные данные и лучшая модель', side = 4)
+
+# наблюдения тестовой выборки
+points(x.test, y.test, 
+       col = 'red', bg = 'red', pch = 21)
+
+# истинная функция
+lines(x.line, y.line, 
+      lwd = 2, lty = 2)
+
+# модель
+lines(x.model.plot, y.model.plot, 
+      lwd = 2, col = 'blue')
+
+# легенда
+legend('top', legend = c('обучение', 'тест', 'f(X)', 'модель'),
+       pch = c(16, 16, NA, NA), 
+       col = c(grey(0.2), 'red', 'black', 'blue'),  
+       lty = c(0, 0, 2, 1), lwd = c(1, 1, 2, 2), cex = 1.2)
+
+par(mfrow = c(1, 1))
+dev.off()
+```
+![](plot1(3).png)
+
+
+
+```{r}
+res.sd <- 6.5              # стандартное отклонение случайного шума
+df.choose <- 7           # выбрать для графика 2 оптимальную степень свободы
+
+# фактические значения x
+set.seed(my.seed)
+x <- runif(x.min, x.max, n = n.all)
+
+# случайный шум
+set.seed(my.seed)
+res <- rnorm(mean = 0, sd = res.sd, n = n.all)
+
+# отбираем наблюдения в обучающую выборку
+set.seed(my.seed)
+inTrain <- sample(seq_along(x), size = train.percent*n.all)
+
+# истинная функция взаимосвязи
+y.func <- function(x) {5 + 3.5*sin((x - 30)/9)}
+
+# для графика истинной взаимосвязи
+x.line <- seq(x.min, x.max, length = n.all)
+y.line <- y.func(x.line)
+
+# фактические значения y (с шумом)
+y <- y.func(x) + res
+
+# Создаём векторы с данными для построения графиков ############################
+
+# наблюдения на обучающей выборке
+x.train <- x[inTrain]
+y.train <- y[inTrain]
+
+# наблюдения на тестовой выборке
+x.test <- x[-inTrain]
+y.test <- y[-inTrain]
+
+png("plot1(4).png", width = 600)
+
+#  График 1: Исходные данные на график #########################################
+
+par(mfrow = c(1, 3))
+
+# убираем широкие поля рисунка
+par(mar = c(4, 4, 1, 1))
+
+# наименьшие/наибольшие значения по осям
+x.lim <- c(x.min, x.max)
+y.lim <- c(min(y), max(y))
+
+# наблюдения с шумом (обучающая выборка)
+plot(x.train, y.train, 
+     col = grey(0.2), bg = grey(0.2), pch = 21,
+     xlab = 'X', ylab = 'Y', 
+     xlim = x.lim, ylim = y.lim, 
+     cex = 1.2, cex.lab = 1.2, cex.axis = 1.2)
+
+# заголовок
+mtext('Исходные данные и истинная функция связи', side = 4)
+
+# наблюдения тестовой выборки
+points(x.test, y.test, col = 'red', bg = 'red', pch = 21)
+
+# истинная функция
+lines(x.line, y.line, lwd = 2, lty = 2)
+
+# легенда
+legend('top', legend = c('обучение', 'тест', 'f(X)'),
+       pch = c(16, 16, NA), 
+       col = c(grey(0.2), 'red', 'black'),  
+       lty = c(0, 0, 2), lwd = c(1, 1, 2), cex = 1.2)
+
+#  Строим модель №2 #########################################
+
+#  Теперь строим модели с df от 2 до 40 ########################################
+
+# максимальное число степеней свободы для модели сплайна
+max.df <- 40
+
+tbl <- data.frame(df = 2:max.df)   # таблица для записи ошибок
+tbl$MSE.train <- 0                 # столбец: ошибки на обучающей выборке
+tbl$MSE.test <- 0                  # столбец: ошибки на тестовой выборке
+
+# цикл по степеням свободы
+for (i in 2:max.df) {
+  # строим модель
+  mod <- smooth.spline(x = x.train, y = y.train, df = i)
+  
+  # модельные значения для расчёта ошибок
+  y.model.train <- predict(mod, data.frame(x = x.train))$y[, 1]
+  y.model.test <- predict(mod, data.frame(x = x.test))$y[, 1]
+  
+  # считаем средний квадрат ошибки на обучающей и тестовой выборке
+  MSE <- c(sum((y.train - y.model.train)^2) / length(x.train),
+           sum((y.test - y.model.test)^2) / length(x.test))
+  
+  # записываем ошибки в таблицу
+  tbl[tbl$df == i, c('MSE.train', 'MSE.test')] <- MSE
+}
+
+# первые строки таблицы
+kable(head(tbl, n = 10))
+
+# График 2: Зависимость MSE от гибкости модели ################################
+
+
+plot(x = tbl$df, y = tbl$MSE.test, 
+     type = 'l', col = 'red', lwd = 2,
+     xlab = 'Степени свободы сплайна', ylab = 'MSE',
+     ylim = c(min(tbl$MSE.train, tbl$MSE.test), 
+              max(tbl$MSE.train, tbl$MSE.test)),
+     cex = 1.2, cex.lab = 1.2, cex.axis = 1.2)
+
+# заголовок
+mtext('Изменение MSE с ростом числа степеней свободы', side = 4)
+
+points(x = tbl$df, y = tbl$MSE.test,
+       pch = 21, col = 'red', bg = 'red')
+lines(x = tbl$df, y = tbl$MSE.train, col = grey(0.3), lwd = 2)
+# неустранимая ошибка
+abline(h = res.sd, lty = 2, col = grey(0.4), lwd = 2)
+
+# легенда
+legend('top', legend = c('обучающая', 'тестовая'),
+       pch = c(NA, 16), 
+       col = c(grey(0.2), 'red'),  
+       lty = c(1, 1), lwd = c(2, 2), cex = 1.2)
+
+# степени свободы у наименьшей ошибки на тестовой выборке
+min.MSE.test <- min(tbl$MSE.test)
+df.min.MSE.test <- tbl[tbl$MSE.test == min.MSE.test, 'df']
+
+# компромисс между точностью и простотой модели по графику
+df.my.MSE.test <- df.choose
+my.MSE.test <- tbl[tbl$df == df.my.MSE.test, 'MSE.test']
+
+# ставим точку на графике
+abline(v = df.my.MSE.test, 
+       lty = 2, lwd = 2)
+points(x = df.my.MSE.test, y = my.MSE.test, 
+       pch = 15, col = 'blue')
+
+mtext(df.my.MSE.test, 
+      side = 1, line = -1, at = df.my.MSE.test, col = 'blue', cex = 1.2)
+
+
+
+#  График 3: Лучшая модель (компромисс между гибкостью и точностью) ############
+
+
+mod.MSE.test <- smooth.spline(x = x.train, y = y.train, df = df.my.MSE.test)
+
+# для гладких графиков модели
+x.model.plot <- seq(x.min, x.max, length = 250)
+y.model.plot <- predict(mod.MSE.test, data.frame(x = x.model.plot))$y[, 1]
+
+# убираем широкие поля рисунка
+par(mar = c(4, 4, 1, 1))
+
+# наименьшие/наибольшие значения по осям
+x.lim <- c(x.min, x.max)
+y.lim <- c(min(y), max(y))
+
+# наблюдения с шумом (обучающая выборка)
+plot(x.train, y.train, 
+     col = grey(0.2), bg = grey(0.2), pch = 21,
+     xlab = 'X', ylab = 'Y', 
+     xlim = x.lim, ylim = y.lim, 
+     cex = 1.2, cex.lab = 1.2, cex.axis = 1.2)
+
+# заголовок
+mtext('Исходные данные и лучшая модель', side = 4)
+
+# наблюдения тестовой выборки
+points(x.test, y.test, 
+       col = 'red', bg = 'red', pch = 21)
+
+# истинная функция
+lines(x.line, y.line, 
+      lwd = 2, lty = 2)
+
+# модель
+lines(x.model.plot, y.model.plot, 
+      lwd = 2, col = 'blue')
+
+# легенда
+legend('top', legend = c('обучение', 'тест', 'f(X)', 'модель'),
+       pch = c(16, 16, NA, NA), 
+       col = c(grey(0.2), 'red', 'black', 'blue'),  
+       lty = c(0, 0, 2, 1), lwd = c(1, 1, 2, 2), cex = 1.2)
+
+par(mfrow = c(1, 1))
+dev.off()
+
+```
+![](plot1(4).png)
+
+
+
+
+
